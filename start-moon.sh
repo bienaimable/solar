@@ -1,4 +1,8 @@
 #!/bin/bash
+# Clean Moon
+docker stop moon && docker rm moon
+# Clean Registry
+docker stop registry && docker rm registry
 # Start a registry
 docker run -d \
   --restart=always \

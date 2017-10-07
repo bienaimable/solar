@@ -76,8 +76,6 @@ class Docker:
         services = yaml.load(open(os.path.join(self.tmp_folder, compose_filename)))['services']
         for service_name, service in services.items():
             logger.debug("Checking for build step for {s}".format(s=service_name))
-            logger.debug(type(service))
-            logger.debug(service)
             if 'build' in service:
                 logger.debug("Build step found")
                 args = ["-t", service['image']]
