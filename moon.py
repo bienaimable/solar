@@ -30,7 +30,6 @@ class Stack:
         logger.debug("Updating stack {n}".format(n=self.name))
         services = yaml.load(open(self.compose_filename))['services']
         for service in services:
-            logger.debug("sh docker service update {n}".format(n=self.name+'_'+service))
             logger.debug(sh.docker.service.update(self.name+'_'+service, '--detach=false'))
 
 @attr.s
@@ -76,7 +75,7 @@ class Docker:
         logger.debug("Checking for build steps in {c}".format(c=compose_filename))
         services = yaml.load(open(os.path.join(self.tmp_folder, compose_filename)))['services']
         for service_name, service in services.items():
-            logger.debug("Checking for {s}".format(s=service_name))
+            logger.debug("Checking for build step for {s}".format(s=service_name))
             logger.debug(type(service))
             logger.debug(service)
             if 'build' in service:
@@ -108,10 +107,8 @@ class Docker:
         for name, compose_filename in desired_stacks.items():
             self.build(compose_filename)
             stack = Stack(name, os.path.join(self.tmp_folder, compose_filename))
-            stack.update()
             stack.deploy()
-
-
+            #stack.update() # Removed because unnecessary
 
 if __name__ == "__main__":
     docker = Docker()
