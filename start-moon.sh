@@ -4,19 +4,19 @@ docker stop moon && docker rm moon
 # Clean Registry
 docker stop registry && docker rm registry
 # Start a registry
-docker run -d \
+docker run \
   --restart=always \
+  --detach \
   --name registry \
   -p 5000:5000 \
   registry:2
-# Build from Moon Dockerfile
-docker build \
-  -t moon \
-  .
 # Run Moon
 docker run \
   --restart=always \
   --detach \
   --name moon \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  moon
+  -e "MOON_REPO=https://f.pillot@gitlab.criteois.com/f.pillot/swarm-configuration-itservers.git" \
+  -e "MOON_BRANCH=develop" \
+  -e "MOON_CYCLE=30" \
+  bienaimable/moon2

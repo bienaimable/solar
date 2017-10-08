@@ -111,6 +111,8 @@ class Docker:
 if __name__ == "__main__":
     docker = Docker()
     while True:
-        docker.sync("https://f.pillot@gitlab.criteois.com/f.pillot/swarm-configuration-itservers.git", branch="master")
-        logger.debug("Waiting")
-        time.sleep(60)
+        branch = os.environ.get('MOON_BRANCH') or 'master'
+        docker.sync(os.environ['MOON_REPO'], branch=branch)
+        cycle_time = os.environ.get('MOON_CYCLE') or '60'
+        logger.debug("Waiting {} seconds before next check".format(cycle_time))
+        time.sleep(int(cycle_time))
