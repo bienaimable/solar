@@ -17,6 +17,6 @@ docker run \
   --name moon \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e "MOON_REPO=https://f.pillot@gitlab.criteois.com/f.pillot/swarm-configuration-itservers.git" \
-  -e "MOON_BRANCH=develop" \
-  -e "MOON_CYCLE=30" \
+  -e "MOON_BRANCH=master" \
+  -e "MOON_CYCLE=60" \
   bienaimable/moon2
