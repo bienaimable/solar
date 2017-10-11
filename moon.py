@@ -100,7 +100,7 @@ class Docker:
         desired_stacks = yaml.load(
             open(os.path.join(tmp_folder.path, stacks_filename))
         )['stacks'] or {}
-        undesired_stacks = [x for x in running_stacks if x.name not in desired_stacks]
+        undesired_stacks = [x for x in running_stacks if x.name not in desired_stacks and x.name != 'moon']
         for stack in undesired_stacks: stack.remove()
         for name, compose_filename in desired_stacks.items():
             self.build(compose_filename)
