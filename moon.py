@@ -7,47 +7,52 @@ import yaml
 import time
 import re
 import pathlib
-#logging.basicConfig(filename="moon.log", level=logging.DEBUG)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
+import sys
+from autologging import traced, logged, TRACE
 
+logging.basicConfig(level=TRACE, stream=sys.stdout,
+    format="%(levelname)s:%(name)s:%(funcName)s:%(message)s")
+
+
+
+@traced
 @attr.s
+@logged
 class Stack:
     name = attr.ib()
     compose_filename = attr.ib(default=None)
-    def deploy(self):
-        logger.debug("Deploying stack {n} from compose file {c}".format(n=self.name, c=self.compose_filename))
-        logger.debug(sh.docker.stack.deploy("-c", self.compose_filename, self.name))
-    def remove(self):
-        logger.debug("Removing stack {n}".format(n=self.name))
-        logger.debug(sh.docker.stack.rm(self.name))
-    def update(self):
-        logger.debug("Updating stack {n}".format(n=self.name))
-        services = yaml.load(open(self.compose_filename))['services']
-        for service in services:
-            logger.debug(sh.docker.service.update(self.name+'_'+service, '--detach=false'))
 
+    def deploy(self):
+        stdout = sh.docker.stack.deploy("-c", self.compose_filename, self.name)
+
+    def remove(self):
+        sh.docker.stack.rm(self.name)
+
+
+
+@traced
 @attr.s
+@logged
 class Folder():
     path = attr.ib()
+
     def delete(self):
-        logger.debug("Deleting folder {p}".format(p=self.path))
         sh.rm("-r", self.path)
+
     def exists(self):
         return(os.path.isdir(self.path))
 
+
+
+@traced
 @attr.s
+@logged
 class Repository():
     folder = attr.ib()
     url = attr.ib()
     branch = attr.ib(default="master")
+
     def clone(self):
-        logger.debug("Cloning from {u}".format(u=self.url))
         git = sh.git.bake(_cwd=str(pathlib.Path(self.folder.path).parent))
         git.clone("--depth", 
                   "1", 
@@ -55,14 +60,24 @@ class Repository():
                   self.branch, 
                   self.url, 
                   self.folder.path)
+
     def uptodate(self):
         git = sh.git.bake(_cwd=self.folder.path)
         git.fetch()
         return "is up-to-date" in git.status()
 
+
+
+@traced
 @attr.s
+@logged
 class Docker:
-    tmp_folder = attr.ib(default="/tmp/moon-configuration/")
+    tmp_folder_path = attr.ib(default="/tmp/moon-configuration/")
+    stacks_filename = attr.ib(default="moon-stacks.yml")
+
+    def __attrs_post_init__(self):
+        self.tmp_folder = Folder(self.tmp_folder_path)
+
     def get_running_stacks(self):
         running_stacks = re.sub(
             r'\s+.*\n', 
@@ -71,42 +86,124 @@ class Docker:
         ).split()
         running_stacks.remove("NAME")
         return [Stack(x) for x in running_stacks]
-    def build(self, compose_filename):
-        logger.debug("Checking for build steps in {c}".format(c=compose_filename))
-        services = yaml.load(open(os.path.join(self.tmp_folder, compose_filename)))['services']
+
+    def get_running_networks(self):
+        running_networks = re.sub(
+            r'\s+.*\n', 
+            '\n',
+            str(sh.docker.network.ls())
+        ).split()
+        running_stacks.remove("NAME")
+        return [Stack(x) for x in running_stacks]
+
+    def build(self, options, image_name):
+        args = ["-t", image_name]
+        if type(options) is str:
+            args.append(options)
+        else:
+            args.append(options['context'])
+            if 'dockerfile' in options:
+                args.extend([ "-f", options['dockerfile'] ])
+            if 'args' in options:
+                args.extend([ "--build-arg", '"'+" ".join(options['args'])+'"' ])
+        sh.docker.build(args)
+
+    def compose_build(self, compose_filename):
+        services = yaml.load(open(os.path.join(self.tmp_folder_path, compose_filename)))['services']
         for service_name, service in services.items():
-            logger.debug("Checking for build step for {s}".format(s=service_name))
             if 'build' in service:
-                logger.debug("Build step found")
-                args = ["-t", service['image']]
-                if type(service['build']) is str:
-                    args.append(service['build'])
-                else:
-                    args.append(service['build']['context'])
-                    if 'dockerfile' in service['build']:
-                        args.extend([ "-f", service['build']['dockerfile'] ])
-                    if 'args' in service['build']:
-                        args.extend([ "--build-arg", '"'+" ".join(service['build']['args'])+'"' ])
-                logger.debug("Build {a}".format(a=args))
-                logger.debug(sh.docker.build(args))
-                logger.debug(sh.docker.push(service['image']))
-    def sync(self, url, branch="master", stacks_filename="moon-stacks.yml"):
-        logger.debug("Syncing Docker stacks from {f} in {url}".format(f=stacks_filename, url=url))
-        tmp_folder = Folder(self.tmp_folder)
-        if tmp_folder.exists(): tmp_folder.delete()
-        repo = Repository(tmp_folder, url=url, branch=branch)
+                image = Image(service['image'], service['build'])
+                image.build()
+                image.push()
+
+    def fetch_config(self, url, branch):
+        if self.tmp_folder.exists(): self.tmp_folder.delete()
+        repo = Repository(self.tmp_folder, url=url, branch=branch)
         repo.clone()
+
+    def init_config(self):
+        config = yaml.load(
+            open(os.path.join(self.tmp_folder.path, self.stacks_filename))
+            )
+        self.desired_stacks = config['stacks'] or {}
+        self.desired_networks = config['networks'] or []
+
+    def prune_stacks(self):
         running_stacks = self.get_running_stacks()
-        desired_stacks = yaml.load(
-            open(os.path.join(tmp_folder.path, stacks_filename))
-        )['stacks'] or {}
+        desired_stacks = self.desired_stacks()
         undesired_stacks = [x for x in running_stacks if x.name not in desired_stacks and x.name != 'moon']
         for stack in undesired_stacks: stack.remove()
+
+    def deploy_stacks(self):
+        desired_stacks = self.desired_stacks()
         for name, compose_filename in desired_stacks.items():
-            self.build(compose_filename)
-            stack = Stack(name, os.path.join(self.tmp_folder, compose_filename))
+            stack = Stack(name, os.path.join(self.tmp_folder_path, compose_filename))
             stack.deploy()
-            #stack.update() # Removed because unnecessary
+
+    def build_images(self):
+        desired_stacks = self.desired_stacks()
+        for name, compose_filename in desired_stacks.items():
+            self.compose_build(compose_filename)
+
+    def create_networks(self):
+        sh.docker.create
+
+    def sync(self, url, branch="master", stacks_filename="moon-stacks.yml"):
+        self.fetch_config(url, branch)
+        self.init_config()
+        self.prune_stacks()
+        self.build_images()
+        self.create_networks()
+        self.deploy_stacks()
+
+
+
+class Image:
+    name = attr.ib()
+    options = attr.ib()
+
+    def build(self):
+        args = ["-t", self.name]
+        if type(self.options) is str:
+            args.append(self.options)
+        else:
+            args.append(self.options['context'])
+            if 'dockerfile' in self.options:
+                args.extend([ "-f", self.options['dockerfile'] ])
+            if 'args' in self.options:
+                args.extend([ "--build-arg", '"'+" ".join(self.options['args'])+'"' ])
+        sh.docker.build(args)
+
+    def push(self):
+        sh.docker.push(self.name)
+
+
+
+class Swarm:
+
+    @property
+    def networks(self):
+        return [Network()]
+
+    @property
+    def stacks(self):
+        return [Stack()]
+
+    def add_network(Network):
+        sh.docker.network.create(Network.name)
+
+    def add_stack(Stack):
+
+
+class Network:
+    add_to(Swarm())
+        Swarm.add_network(self)
+
+class Stack:
+    add_to(Swarm())
+        Swarm.add_stack(self)
+
+
 
 if __name__ == "__main__":
     docker = Docker()
@@ -114,5 +211,5 @@ if __name__ == "__main__":
         branch = os.environ.get('MOON_BRANCH') or 'master'
         docker.sync(os.environ['MOON_REPO'], branch=branch)
         cycle_time = os.environ.get('MOON_CYCLE') or '60'
-        logger.debug("Waiting {} seconds before next check".format(cycle_time))
+        logging.debug("Waiting {} seconds before next check".format(cycle_time))
         time.sleep(int(cycle_time))
