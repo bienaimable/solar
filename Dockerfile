@@ -14,7 +14,7 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add - && a
 RUN apt-get update && apt-get install -y docker-ce=17.09.0~ce-0~ubuntu
 RUN apt-get update && apt-get install -y git
 RUN apt-get update && apt-get install -y python3 python3-pip
-RUN pip3 install attrs sh pyyaml
+RUN pip3 install attrs sh pyyaml Autologging
 WORKDIR /app
 COPY moon.py /app
 ENTRYPOINT ["python3", "moon.py"]
