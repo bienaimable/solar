@@ -129,7 +129,10 @@ class Instructions:
                       for name, compose_filename 
                       in config['stacks'].items() 
                       ]
-        self.networks = [ Network(name) for name in config['networks'] ]
+        if 'networks' in config:
+            self.networks = [ Network(name) for name in config['networks'] ]
+        else
+            self.networks = []
 
 
 
