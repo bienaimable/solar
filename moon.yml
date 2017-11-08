@@ -11,5 +11,5 @@ services:
             - /var/run/docker.sock:/var/run/docker.sock
         environment:
             MOON_REPO: https://f.pillot@gitlab.criteois.com/f.pillot/swarm-configuration-itservers.git
-            MOON_BRANCH: develop
+            MOON_BRANCH: master
             MOON_CYCLE: 60
