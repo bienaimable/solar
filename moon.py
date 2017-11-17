@@ -131,7 +131,7 @@ class Instructions:
                       ]
         if 'networks' in config:
             self.networks = [ Network(name) for name in config['networks'] ]
-        else
+        else:
             self.networks = []
 
 
@@ -156,7 +156,7 @@ class Swarm:
         return [ Stack(x[name_index]) for x in data if x ]
 
     def add_network(self, network):
-        sh.docker.network.create(network.name)
+        sh.docker.network.create(network.name, '--scope', 'swarm', '--driver', 'overlay')
 
     def remove_network(self, network):
         sh.docker.network.rm(network.name)
@@ -197,8 +197,6 @@ class Manager:
 
     def create_networks(self, instructions):
         running_networks = [ x.name for x in self.swarm.networks ]
-        print(running_networks)
-        time.sleep(5)
         for network in instructions.networks:
             if network.name not in running_networks:
                 network.add_to(self.swarm)
@@ -222,7 +220,6 @@ if __name__ == "__main__":
     manager = Manager()
     while True:
         branch = os.environ.get('MOON_BRANCH') or 'master'
-        print(branch)
         manager.sync(os.environ['MOON_REPO'], branch=branch)
         cycle_time = os.environ.get('MOON_CYCLE') or '60'
         logging.debug("Waiting {} seconds before next check".format(cycle_time))
