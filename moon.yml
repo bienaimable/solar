@@ -7,9 +7,14 @@ services:
                 condition: any
                 delay: 30s
                 window: 30s
-        volumes: 
+            placement:
+                constraints: [node.role == manager]
+        volumes:
             - /var/run/docker.sock:/var/run/docker.sock
+            - data:/data
         environment:
             MOON_REPO: https://f.pillot@gitlab.criteois.com/f.pillot/swarm-configuration-itservers.git
             MOON_BRANCH: master
             MOON_CYCLE: 60
+volumes:
+    data:
