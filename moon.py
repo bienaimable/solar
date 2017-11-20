@@ -85,7 +85,7 @@ class Service:
                 url, branch = self.definition['build']['context'].split('#')
             self.repository = Repository(
                                 Folder(
-                                    '/repo_' + stack_name + '_' + self.name), 
+                                    '/data/repo_' + self.stack_name + '_' + self.name), 
                                 url=url,
                                 branch=branch)
 
@@ -96,10 +96,11 @@ class Stack:
     name = attr.ib()
     filename = attr.ib(default=None)
     def __attrs_post_init__(self):
-        self.services = []
-        services = yaml.load(open(os.path.join('/instructions', self.filename)))['services']
-        for name, definition in services.items():
-            self.services.append(Service(name, self.name, definition))
+        if self.filename != None:
+            self.services = []
+            services = yaml.load(open(os.path.join('/data/instructions', self.filename)))['services']
+            for name, definition in services.items():
+                self.services.append(Service(name, self.name, definition))
     def add_to(self, swarm):
         swarm.add_stack(self)
     def remove_from(self, swarm):
@@ -121,10 +122,20 @@ class Network:
 class Instructions:
     repository = attr.ib()
     filename = attr.ib()
-    def refresh(self):
-        self.repository.clone()
-        filepath = os.path.join(self.repository.folder.path, self.filename)
-        config = yaml.load(open(filepath))
+    def __attrs_post_init__(self):
+        self.filepath = os.path.join(self.repository.folder.path, self.filename)
+        if self.repository.folder.exists():
+            config = yaml.load(open(self.filepath))
+            self.load_stacks()
+            if 'networks' in config:
+                self.networks = [ Network(name) for name in config['networks'] ]
+            else:
+                self.networks = []
+        else:
+            self.stacks = []
+            self.networks = []
+    def load_stacks(self):
+        config = yaml.load(open(self.filepath))
         self.stacks = [ Stack(
                              name, 
                              os.path.join(self.repository.folder.path, filename)
@@ -132,6 +143,10 @@ class Instructions:
                       for name, filename 
                       in config['stacks'].items() 
                       ]
+    def refresh(self):
+        self.repository.clone()
+        self.load_stacks()
+        config = yaml.load(open(self.filepath))
         if 'networks' in config:
             self.networks = [ Network(name) for name in config['networks'] ]
         else:
@@ -179,7 +194,7 @@ class Manager:
     def link(self, url, branch, stacks_filename="moon-stacks.yml"):
         self.instructions = Instructions(
                             Repository(
-                                Folder('/instructions'), 
+                                Folder('/data/instructions'), 
                                 url=url, 
                                 branch=branch), 
                             filename=stacks_filename)
@@ -197,7 +212,10 @@ class Manager:
                         service.image.build()
                         service.image.push()
                         stack.add_to(self.swarm)
-                        repository.clone()
+                        service.repository.clone()
+            if not any(running_stack.name == stack.name for running_stack in self.swarm.stacks): 
+                stack.add_to(self.swarm)
+
     def monitor(self, cycle_time):
         while True:
             self.sync()

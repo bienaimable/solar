@@ -1,19 +1,20 @@
 FROM ubuntu:xenial
-ENV REFRESHED_ON 2017-10-07
+ENV REFRESHED_ON 2017-11-20
 RUN apt-get update && apt-get install -y \
     linux-image-extra-$(uname -r) \
     linux-image-extra-virtual \
     apt-transport-https \
     ca-certificates \
     curl \
-    software-properties-common
+    software-properties-common \
+    git \
+    python3 \
+    python3-pip
 RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add - && add-apt-repository \
     "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
     $(lsb_release -cs) \
     stable"
 RUN apt-get update && apt-get install -y docker-ce=17.09.0~ce-0~ubuntu
-RUN apt-get update && apt-get install -y git
-RUN apt-get update && apt-get install -y python3 python3-pip
 RUN pip3 install attrs sh pyyaml Autologging
 WORKDIR /app
 COPY moon.py /app
