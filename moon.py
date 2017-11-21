@@ -33,7 +33,7 @@ class Repository():
     folder = attr.ib()
     url = attr.ib()
     branch = attr.ib()
-    def clone(self):
+    def refresh(self):
         if self.folder.exists(): self.folder.delete()
         git = sh.git.bake(_cwd=str(self.folder.parent))
         git.clone("--depth", 
@@ -75,8 +75,9 @@ class Service:
     name = attr.ib()
     stack_name = attr.ib()
     definition = attr.ib()
+    repository = None
+    image = None
     def __attrs_post_init__(self):
-        self.repository = None
         if 'build' in self.definition:
             self.image = Image(self.definition['image'], self.definition['build'])
             if type(self.definition['build']) is str:
@@ -134,23 +135,27 @@ class Instructions:
         else:
             self.stacks = []
             self.networks = []
-    def load_stacks(self):
+    @property
+    def stacks(self):
         config = yaml.load(open(self.filepath))
-        self.stacks = [ Stack(
+        return [ Stack(
                              name, 
                              os.path.join(self.repository.folder.path, filename)
                              )
                       for name, filename 
                       in config['stacks'].items() 
                       ]
-    def refresh(self):
-        self.repository.clone()
-        self.load_stacks()
+    @property
+    def networks(self):
         config = yaml.load(open(self.filepath))
         if 'networks' in config:
-            self.networks = [ Network(name) for name in config['networks'] ]
+            return [ Network(name) for name in config['networks'] ]
         else:
-            self.networks = []
+            return []
+    def refresh(self):
+        self.repository.refresh()
+    def uptodate(self):
+        return self.repository.uptodate()
 
 @traced
 @attr.s
@@ -199,12 +204,37 @@ class Manager:
                                 branch=branch), 
                             filename=stacks_filename)
     def sync(self):
-        if not self.instructions.repository.uptodate():
+        if not self.instructions.uptodate():
             self.instructions.refresh()
+            self.clean_stacks(self.instructions)
+            self.create_networks(self.instructions)
+            # Build
+            for stack in self.instructions.stacks:
+                for service in stack.services:
+                    if service.repository:
+                        if not service.repository.uptodate():
+                            service.image.build()
+                            service.image.push()
+                            service.repository.refresh()
+            # Deploy everything
             for stack in self.instructions.stacks:
                 stack.add_to(self.swarm)
-        self.clean_stacks(self.instructions)
-        self.create_networks(self.instructions)
+        else:
+            self.clean_stacks(self.instructions)
+            self.create_networks(self.instructions)
+            # Build
+            for stack in self.instructions.stacks:
+                for service in stack.services:
+                    if service.repository:
+                        if not service.repository.uptodate():
+                            service.image.build()
+                            service.image.push()
+                            service.repository.refresh()
+            # Deploy only missing
+            if not any(running_stack.name == stack.name for running_stack in self.swarm.stacks): 
+                stack.add_to(self.swarm)
+
+
         for stack in self.instructions.stacks:
             for service in stack.services:
                 if service.repository:
@@ -212,9 +242,7 @@ class Manager:
                         service.image.build()
                         service.image.push()
                         stack.add_to(self.swarm)
-                        service.repository.clone()
-            if not any(running_stack.name == stack.name for running_stack in self.swarm.stacks): 
-                stack.add_to(self.swarm)
+                        service.repository.refresh()
 
     def monitor(self, cycle_time):
         while True:
