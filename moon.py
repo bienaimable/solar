@@ -125,16 +125,6 @@ class Instructions:
     filename = attr.ib()
     def __attrs_post_init__(self):
         self.filepath = os.path.join(self.repository.folder.path, self.filename)
-        if self.repository.folder.exists():
-            config = yaml.load(open(self.filepath))
-            self.load_stacks()
-            if 'networks' in config:
-                self.networks = [ Network(name) for name in config['networks'] ]
-            else:
-                self.networks = []
-        else:
-            self.stacks = []
-            self.networks = []
     @property
     def stacks(self):
         config = yaml.load(open(self.filepath))
