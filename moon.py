@@ -10,8 +10,8 @@ import pathlib
 import sys
 from autologging import traced, logged, TRACE
 
-#logging.basicConfig(level=TRACE, stream=sys.stdout,
-#    format="%(levelname)s:%(name)s:%(funcName)s:%(message)s")
+logging.basicConfig(level=logging.WARNING, stream=sys.stdout,
+    format="%(levelname)s:%(name)s:%(funcName)s:%(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
