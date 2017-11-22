@@ -69,15 +69,16 @@ class Image:
             for _ in range(0,2):
                 try:
                     for line in sh.docker.build(args, _iter=True):
-                        logger.info(line)
+                        if line: logger.info(line)
                 except Exception as e:
                     logger.warning(e)
                     logger.warning(
                         'Building image {} failed. Trying twice and then skipping'\
-                        .format(image.name))
+                        .format(self.name))
                     time.sleep(10)
                     continue
-                break
+                return True
+            return False
 
     def push(self):
         sh.docker.push(self.name)
@@ -222,9 +223,10 @@ class Manager:
                             .format(
                                 service.name,
                                 stack.name))
-                        service.image.build()
-                        service.image.push()
-                        stack.add_to(self.swarm)
+                        success = service.image.build()
+                        if success:
+                            service.image.push()
+                            stack.add_to(self.swarm)
                         service.repository.refresh()
     def sync(self):
         if not self.instructions.uptodate():
