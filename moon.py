@@ -66,8 +66,19 @@ class Image:
                 args.extend([ "-f", self.options['dockerfile'] ])
             if 'args' in self.options:
                 args.extend([ "--build-arg", '"'+" ".join(self.options['args'])+'"' ])
-        for line in sh.docker.build(args, _iter=True):
-            logger.info(line)
+            for _ in range(0,2):
+                try:
+                    for line in sh.docker.build(args, _iter=True):
+                        logger.info(line)
+                except e:
+                    logger.warning(e)
+                    logger.warning(
+                        'Building image {} failed. Trying twice and then skipping'\
+                        .format(image.name))
+                    time.sleep(10)
+                    continue
+                break
+
     def push(self):
         sh.docker.push(self.name)
 
