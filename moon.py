@@ -70,7 +70,7 @@ class Image:
                 try:
                     for line in sh.docker.build(args, _iter=True):
                         logger.info(line)
-                except e:
+                except Exception as e:
                     logger.warning(e)
                     logger.warning(
                         'Building image {} failed. Trying twice and then skipping'\
