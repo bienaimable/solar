@@ -5,7 +5,7 @@ services:
         deploy:
             restart_policy:
                 condition: any
-                delay: 30s
+                delay: 120s
                 window: 30s
             placement:
                 constraints: [node.role == manager]
@@ -15,6 +15,6 @@ services:
         environment:
             MOON_REPO: https://f.pillot@gitlab.criteois.com/f.pillot/swarm-configuration-itservers.git
             MOON_BRANCH: master
-            MOON_CYCLE: 60
+            MOON_CYCLE: 30
 volumes:
     data:
