@@ -13,6 +13,7 @@ from autologging import traced, logged, TRACE
 #logging.basicConfig(level=TRACE, stream=sys.stdout,
 #    format="%(levelname)s:%(name)s:%(funcName)s:%(message)s")
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 @traced
 @attr.s
@@ -191,7 +192,7 @@ class Manager:
         for running_stack in self.swarm.stacks:
             if running_stack.name != 'moon'\
             and not any(stack.name == running_stack.name
-                       for stack in instructions.stacks)
+                       for stack in instructions.stacks):
                 logger.info('Removing stack {}'.format(stack.name))
                 stack.remove_from(self.swarm)
     def create_networks(self, instructions):
