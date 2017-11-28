@@ -8,6 +8,7 @@ import time
 import re
 import pathlib
 import sys
+import hashlib
 from autologging import traced, logged, TRACE
 
 logging.basicConfig(level=logging.WARNING, stream=sys.stdout,
@@ -32,9 +33,18 @@ class Folder():
 @attr.s
 @logged
 class Repository():
-    folder = attr.ib()
     url = attr.ib()
     branch = attr.ib()
+    stack_name = attr.ib()
+    service_name = attr.ib()
+    folder = Folder(
+                    '/data/' \
+                    + hashlib.sha256(
+                                     stack_name + '#' \
+                                     + service_name + '#' \
+                                     + url + '#' \
+                                     + branch)) 
+    
     def refresh(self):
         if self.folder.exists(): self.folder.delete()
         git = sh.git.bake(_cwd=str(self.folder.parent))
@@ -66,19 +76,16 @@ class Image:
                 args.extend([ "-f", self.options['dockerfile'] ])
             if 'args' in self.options:
                 args.extend([ "--build-arg", '"'+" ".join(self.options['args'])+'"' ])
-            for _ in range(0,2):
-                try:
-                    for line in sh.docker.build(args, _iter=True):
-                        if line: logger.info(line)
-                except Exception as e:
-                    logger.warning(e)
-                    logger.warning(
-                        'Building image {} failed. Trying twice and then skipping'\
-                        .format(self.name))
-                    time.sleep(10)
-                    continue
-                return True
-            return False
+            try:
+                for line in sh.docker.build(args, _iter=True):
+                    if line: logger.info(line)
+            except Exception as e:
+                logger.warning(e)
+                logger.warning(
+                    'Building image {} failed. Skipping'\
+                    .format(self.name))
+                return False
+            return True
 
     def push(self):
         sh.docker.push(self.name)
@@ -100,8 +107,8 @@ class Service:
             else:
                 url, branch = self.definition['build']['context'].split('#')
             self.repository = Repository(
-                                Folder(
-                                    '/data/repo_' + self.stack_name + '_' + self.name), 
+                                stack_name=stack_name,
+                                service_name=self.name,
                                 url=url,
                                 branch=branch)
 
@@ -196,7 +203,8 @@ class Manager:
     def link(self, url, branch, stacks_filename="moon-stacks.yml"):
         self.instructions = Instructions(
                             Repository(
-                                Folder('/data/instructions'), 
+                                stack_name='moon',
+                                service_name='moon',
                                 url=url, 
                                 branch=branch), 
                             filename=stacks_filename)
@@ -207,12 +215,14 @@ class Manager:
                        for stack in instructions.stacks):
                 logger.info('Removing stack {}'.format(stack.name))
                 stack.remove_from(self.swarm)
+                logger.info('Stack {} removed'.format(stack.name))
     def create_networks(self, instructions):
         for network in instructions.networks:
             if not any(running_network.name == network.name 
                        for running_network in self.swarm.networks):
                 logger.info('Adding network {}'.format(network.name))
                 network.add_to(self.swarm)
+                logger.info('Network {} added'.format(network.name))
     def build_and_deploy(self, stacks):
         for stack in stacks:
             for service in stack.services:
@@ -227,6 +237,11 @@ class Manager:
                         if success:
                             service.image.push()
                             stack.add_to(self.swarm)
+                            logger.info(
+                                'Service {} in stack {} refreshed'\
+                                .format(
+                                    service.name,
+                                    stack.name))
                         service.repository.refresh()
     def sync(self):
         if not self.instructions.uptodate():
@@ -237,7 +252,9 @@ class Manager:
             self.build_and_deploy(self.instructions.stacks)
             # Deploy everything
             for stack in self.instructions.stacks:
+                logger.info('Deploying {}'.format(stack.name))
                 stack.add_to(self.swarm)
+            logger.info('System refreshed')
         else:
             self.clean_stacks(self.instructions)
             self.create_networks(self.instructions)
@@ -246,6 +263,7 @@ class Manager:
             for stack in self.instructions.stacks:
                 if not any(running_stack.name == stack.name 
                            for running_stack in self.swarm.stacks):
+                    logger.info('Deploying {}'.format(stack.name))
                     stack.add_to(self.swarm)
     def monitor(self, cycle_time):
         while True:
