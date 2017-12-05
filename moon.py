@@ -37,14 +37,13 @@ class Repository():
     branch = attr.ib()
     stack_name = attr.ib()
     service_name = attr.ib()
-    folder = Folder(
-                    '/data/' \
-                    + hashlib.sha256(
-                                     stack_name + '#' \
-                                     + service_name + '#' \
-                                     + url + '#' \
-                                     + branch)) 
-    
+    def __attrs_post_init__(self):
+        unique_id = hashlib.sha256((
+                                    self.stack_name + '#' \
+                                    + self.service_name + '#' \
+                                    + self.url + '#' \
+                                    + self.branch).encode('utf-8')).hexdigest()
+        self.folder = Folder('/data/' + unique_id)
     def refresh(self):
         if self.folder.exists(): self.folder.delete()
         git = sh.git.bake(_cwd=str(self.folder.parent))
@@ -107,7 +106,7 @@ class Service:
             else:
                 url, branch = self.definition['build']['context'].split('#')
             self.repository = Repository(
-                                stack_name=stack_name,
+                                stack_name=self.stack_name,
                                 service_name=self.name,
                                 url=url,
                                 branch=branch)
@@ -213,9 +212,9 @@ class Manager:
             if running_stack.name != 'moon'\
             and not any(stack.name == running_stack.name
                        for stack in instructions.stacks):
-                logger.info('Removing stack {}'.format(stack.name))
-                stack.remove_from(self.swarm)
-                logger.info('Stack {} removed'.format(stack.name))
+                logger.info('Removing stack {}'.format(running_stack.name))
+                running_stack.remove_from(self.swarm)
+                logger.info('Stack {} removed'.format(running_stack.name))
     def create_networks(self, instructions):
         for network in instructions.networks:
             if not any(running_network.name == network.name 
