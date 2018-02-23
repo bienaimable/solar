@@ -9,12 +9,25 @@ services:
                 window: 30s
             placement:
                 constraints: [node.role == manager]
+        secrets:
+            - source: private_key
+              target: private_key
+              uid: '0'
+              gid: '0'
+              mode: 0600
         volumes:
             - /var/run/docker.sock:/var/run/docker.sock
             - data:/data
         environment:
+            MOON_BUILD_LOCATION: localhost
+            MOON_SWARM_LOCATION: f.pillot@192.168.154.37
+            MOON_PRIVATE_KEY: '/run/secrets/private_key'
+            MOON_BRANCH: master
             MOON_REPO: https://f.pillot@gitlab.criteois.com/f.pillot/swarm-configuration-itservers.git
             MOON_BRANCH: master
             MOON_CYCLE: 30
+secrets:
+    private_key:
+        file: /home/user/.ssh/id_rsa
 volumes:
     data:

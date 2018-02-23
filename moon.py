@@ -65,6 +65,15 @@ class Repository():
 class Image:
     name = attr.ib()
     options = attr.ib()
+    def __attrs_post_init__(self):
+        if locations['build_location'] == 'localhost':
+            self.shell = sh
+        else:
+            self.shell = sh.ssh.bake(
+                locations['build_location'], 
+                i=locations['private_key'], 
+                T=True,
+                o='StrictHostKeyChecking=no')
     def build(self):
         args = ["-t", self.name]
         if type(self.options) is str:
@@ -76,7 +85,7 @@ class Image:
             if 'args' in self.options:
                 args.extend([ "--build-arg", '"'+" ".join(self.options['args'])+'"' ])
             try:
-                for line in sh.docker.build(args, _iter=True):
+                for line in self.shell.docker.build(args, _iter=True):
                     if line: logger.info(line)
             except Exception as e:
                 logger.warning(e)
@@ -87,7 +96,7 @@ class Image:
             return True
 
     def push(self):
-        sh.docker.push(self.name)
+        self.shell.docker.push(self.name)
 
 @traced
 @attr.s
@@ -172,26 +181,35 @@ class Instructions:
 @attr.s
 @logged
 class Swarm:
+    def __attrs_post_init__(self):
+        if locations['swarm_location'] == 'localhost':
+            self.shell = sh
+        else:
+            self.shell = sh.ssh.bake(
+                locations['swarm_location'], 
+                i=locations['private_key'], 
+                T=True,
+                o='StrictHostKeyChecking=no')
     @property
     def networks(self):
         name_index = 1
-        output = sh.docker.network.ls()
+        output = self.shell.docker.network.ls()
         data = [ x.split() for x in output.split('\n')[1:] ]
         return [ Network(x[name_index]) for x in data if x ]
     @property
     def stacks(self):
         name_index = 0
-        output = sh.docker.stack.ls()
+        output = self.shell.docker.stack.ls()
         data = [ x.split() for x in output.split('\n')[1:] ]
         return [ Stack(x[name_index]) for x in data if x ]
     def add_network(self, network):
-        sh.docker.network.create(network.name, '--scope', 'swarm', '--driver', 'overlay')
+        self.shell.docker.network.create(network.name, '--scope', 'swarm', '--driver', 'overlay')
     def remove_network(self, network):
-        sh.docker.network.rm(network.name)
+        self.shell.docker.network.rm(network.name)
     def add_stack(self, stack):
-        sh.docker.stack.deploy("-c", stack.filename, stack.name)
+        self.shell.docker.stack.deploy("-c", stack.filename, stack.name)
     def remove_stack(self, stack):
-        sh.docker.stack.rm(stack.name)
+        self.shell.docker.stack.rm(stack.name)
 
 @traced
 @attr.s
@@ -268,6 +286,12 @@ class Manager:
         while True:
             self.sync()
             time.sleep(int(cycle_time))
+
+
+locations = {}
+locations['build_location'] = os.environ.get('MOON_BUILD_LOCATION') or 'localhost'
+locations['swarm_location'] = os.environ.get('MOON_SWARM_LOCATION') or 'localhost'
+locations['private_key'] = os.environ.get('MOON_PRIVATE_KEY')
 
 if __name__ == "__main__":
     manager = Manager()
