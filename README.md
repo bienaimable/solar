@@ -9,7 +9,7 @@ Note that the moon node doesn't need to be part of the main swarm.
 ### Build location
 The machine where the build step and containerization of the apps happens. 
 It needs to have access to all resources for the build, which usually means a web connection.
-Note that the build location node doesn't need to be part of swarm.
+Note that the build location node doesn't need to be part of the main swarm.
 
 ### Repository
 This is where the Docker images will be pushed after they are built. 
@@ -96,7 +96,6 @@ secrets:
 volumes:
     data:
 ```
-
 MOON\_REPO indicates the repository where the moon-stacks.yml file can be found. 
 Here is a example of moon-stacks.yml listing the compose files for each stack to be run on the swarm:
 ```
