@@ -18,8 +18,29 @@ This is the git repository from where the instructions for the deployer will be 
     networks:
         - external_network_name
         - other_external_network
+        - frontend
 ```
 The deployer will create the external networks, and then build and deploy the stacks listed from their respective compose files. 
+
+Example of a compose file:
+```yaml
+    version: "3.3"
+    services:
+        my_awesome_application:
+            image: 192.168.154.37:5000/my_awesome_application
+            ports:
+                - "60906:5000"
+            build:
+                context:  https://gitlab.amazing.com/mr.fantastic/awesome_app.git#master
+            networks:
+                - frontend
+    networks:
+        frontend:
+            external: true
+```
+
+Note that only repositories with no authentication (aka public) on HTTP/HTTPS are supported at this time.
+
 
 ### Deployer node
 This is the node where the Moon deployer is living.
