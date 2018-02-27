@@ -207,7 +207,9 @@ class Swarm:
     def remove_network(self, network):
         self.shell.docker.network.rm(network.name)
     def add_stack(self, stack):
-        self.shell.docker.stack.deploy("-c", stack.filename, stack.name)
+        compose_file = sh.cat(stack.filename)
+        self.shell.docker.stack.deploy(compose_file, '--compose-file', '-', stack.name)
+        #self.shell.docker.stack.deploy("-c", stack.filename, stack.name)
     def remove_stack(self, stack):
         self.shell.docker.stack.rm(stack.name)
 
@@ -240,11 +242,11 @@ class Manager:
                 logger.info('Adding network {}'.format(network.name))
                 network.add_to(self.swarm)
                 logger.info('Network {} added'.format(network.name))
-    def build_and_deploy(self, stacks):
+    def build_and_push(self, stacks, scope='everything'):
         for stack in stacks:
             for service in stack.services:
                 if service.repository:
-                    if not service.repository.uptodate():
+                    if not service.repository.uptodate() or scope == 'everything':
                         logger.info(
                             'Service {} in stack {} not up-to-date. Refreshing...'\
                             .format(
@@ -260,28 +262,25 @@ class Manager:
                                     service.name,
                                     stack.name))
                         service.repository.refresh()
+    def deploy(self, stacks, scope='everything'):
+            for stack in self.instructions.stacks:
+                if ( not any(running_stack.name == stack.name 
+                            for running_stack in self.swarm.stacks)
+                     or scope == 'everything' ):
+                    logger.info('Deploying {}'.format(stack.name))
+                    stack.add_to(self.swarm)
     def sync(self):
         if not self.instructions.uptodate():
             logger.info('Instructions not up-to-date. Refreshing...')
             self.instructions.refresh()
-            self.clean_stacks(self.instructions)
-            self.create_networks(self.instructions)
-            self.build_and_deploy(self.instructions.stacks)
-            # Deploy everything
-            for stack in self.instructions.stacks:
-                logger.info('Deploying {}'.format(stack.name))
-                stack.add_to(self.swarm)
-            logger.info('System refreshed')
+            scope = 'everything'
         else:
-            self.clean_stacks(self.instructions)
-            self.create_networks(self.instructions)
-            self.build_and_deploy(self.instructions.stacks)
-            # Deploy only missing
-            for stack in self.instructions.stacks:
-                if not any(running_stack.name == stack.name 
-                           for running_stack in self.swarm.stacks):
-                    logger.info('Deploying {}'.format(stack.name))
-                    stack.add_to(self.swarm)
+            scope = 'missing'
+        self.clean_stacks(self.instructions)
+        self.create_networks(self.instructions)
+        self.build_and_push(self.instructions.stacks, scope)
+        self.deploy(self.instructions.stacks, scope)
+        if scope == 'everything': logger.info('System refreshed')
     def monitor(self, cycle_time):
         while True:
             self.sync()

@@ -24,7 +24,7 @@ services:
             MOON_PRIVATE_KEY: '/run/secrets/private_key'
             MOON_BRANCH: master
             MOON_REPO: https://f.pillot@gitlab.criteois.com/f.pillot/swarm-configuration-itservers.git
-            MOON_BRANCH: master
+            MOON_BRANCH: test-new-moon
             MOON_CYCLE: 30
 secrets:
     private_key:
