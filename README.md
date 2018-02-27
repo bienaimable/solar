@@ -40,7 +40,7 @@ Visit https://docs.docker.com/install/ for instructions.
     docker swarm init
 ```
 
-- Create a registry on a machine that your swarm can reach
+- Create a registry on a machine that all the other machines can reach
 ```bash
     docker stop registry && docker rm registry
     docker run \
