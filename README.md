@@ -105,9 +105,8 @@ Restart docker daemon:
 - Set up ssh keys. If any of the build node or the swarm manager node isn't the same machine as the deployer node, you will need to set up a private key for Moon to be able to ssh into the remote machines. 
 The path to the private key needs to be provided to Moon in the MOON\_PRIVATE\_KEY environment variable. 
 If you run Moon in a container as decribed below, you can use a Docker secret to pass the file to the container.
-Private keys will need to be uploaded to the remote hosts.
+Public keys will also need to be uploaded to the remote hosts.
 Here are instructions for Ubuntu: https://help.ubuntu.com/community/SSH/OpenSSH/Keys
-
 
 
 - Create a compose file (moon.yml) to configure your deployer. 
