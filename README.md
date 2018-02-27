@@ -50,7 +50,7 @@ Note that the deployer node doesn't need to be part of the main swarm.
 ### Build node
 The machine where the build step and containerization of the apps happens. 
 It needs to have access to all resources for the build, which usually means a web connection.
-Note that the build node node doesn't need to be part of the main swarm.
+Note that the build node doesn't need to be part of the main swarm.
 
 ### Registry
 This is where the Docker images will be pushed after they are built. 
