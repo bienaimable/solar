@@ -51,6 +51,16 @@ docker run \
   registry:2
 ```
 
+- If you don't secure your registry with TLS then you may need to add it to the Docker Daemon configuration on all the machines to allow Docker to connect to it.
+Create or modify /etc/docker/daemon.json on the client machine
+```
+{ "insecure-registries":["myregistry.example.com:5000"] }
+```
+Restart docker daemon
+```
+sudo /etc/init.d/docker restart
+```
+
 - Set up ssh keys
 If any of the build location or the swarm manager location isn't the same machine as the deployer location, you will need to set up a private key for Moon to be able to ssh into the remote machines. 
 The path to the private key needs to be provided to Moon in the MOON\_PRIVATE\_KEY environment variable. 
