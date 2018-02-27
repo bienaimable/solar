@@ -31,34 +31,34 @@ The deployer needs to be able to connect to a swarm manager to issue commands to
 Visit https://docs.docker.com/install/ for instructions.
 
 - (Optional) For convenience, you can add the relevant users to the docker group:
-```
-sudo usermod -aG docker $USER
+```bash
+    sudo usermod -aG docker $USER
 ```
 
 - Activate swarm mode on all the machines:
-```
-docker swarm init
+```bash
+    docker swarm init
 ```
 
 - Create a registry on a machine that your swarm can reach
-```
-docker stop registry && docker rm registry
-docker run \
-  --restart=always \
-  --detach \
-  --name registry \
-  -p 5000:5000 \
-  registry:2
+```bash
+    docker stop registry && docker rm registry
+    docker run \
+      --restart=always \
+      --detach \
+      --name registry \
+      -p 5000:5000 \
+      registry:2
 ```
 
 - If you don't secure your registry with TLS then you may need to add it to the Docker Daemon configuration on all the machines to allow Docker to connect to it.
-Create or modify /etc/docker/daemon.json on the client machine
+Create or modify /etc/docker/daemon.json on the client machine and add this line:
+```json
+    { "insecure-registries":["myregistry.example.com:5000"] }
 ```
-{ "insecure-registries":["myregistry.example.com:5000"] }
-```
-Restart docker daemon
-```
-sudo /etc/init.d/docker restart
+Restart docker daemon:
+```bash
+    sudo /etc/init.d/docker restart
 ```
 
 - Set up ssh keys
@@ -72,65 +72,65 @@ Here are instructions for Ubuntu: https://help.ubuntu.com/community/SSH/OpenSSH/
 
 - Create a compose file (moon.yml) to configure your deployer. 
 Here is an example using a remote swarm manager, a private key provided as a Docker secret, and a syncing cycle of 30 seconds:
-```
-version: "3.3"
-services:
-    moon:
-        image: bienaimable/moon2
-        deploy:
-            restart_policy:
-                condition: any
-                delay: 120s
-                window: 30s
-            placement:
-                constraints: [node.role == manager]
-        secrets:
-            - source: private_key
-              target: private_key
-              uid: '0'
-              gid: '0'
-              mode: 0600
-        volumes:
-            - /var/run/docker.sock:/var/run/docker.sock
-            - data:/data
-        environment:
-            MOON_BUILD_LOCATION: localhost
-            MOON_SWARM_LOCATION: f.pillot@192.168.154.37
-            MOON_PRIVATE_KEY: '/run/secrets/private_key'
-            MOON_REPO: https://f.pillot@gitlab.criteois.com/f.pillot/swarm-configuration-itservers.git
-            MOON_BRANCH: master
-            MOON_CYCLE: 30
-secrets:
-    private_key:
-        file: /home/user/.ssh/id_rsa
-volumes:
-    data:
+```yaml
+    version: "3.3"
+    services:
+        moon:
+            image: bienaimable/moon2
+            deploy:
+                restart_policy:
+                    condition: any
+                    delay: 120s
+                    window: 30s
+                placement:
+                    constraints: [node.role == manager]
+            secrets:
+                - source: private_key
+                  target: private_key
+                  uid: '0'
+                  gid: '0'
+                  mode: 0600
+            volumes:
+                - /var/run/docker.sock:/var/run/docker.sock
+                - data:/data
+            environment:
+                MOON_BUILD_LOCATION: localhost
+                MOON_SWARM_LOCATION: f.pillot@192.168.154.37
+                MOON_PRIVATE_KEY: '/run/secrets/private_key'
+                MOON_REPO: https://f.pillot@gitlab.criteois.com/f.pillot/swarm-configuration-itservers.git
+                MOON_BRANCH: master
+                MOON_CYCLE: 30
+    secrets:
+        private_key:
+            file: /home/user/.ssh/id_rsa
+    volumes:
+        data:
 ```
 MOON\_REPO indicates the repository where the moon-stacks.yml file can be found. 
 Here is a example of moon-stacks.yml listing the compose files for each stack to be run on the swarm:
-```
-stacks:
-    nginx_scope_feedback: stacks/nginx_scope_feedback.yml
-    elk: stacks/elk.yml
-    metis_develop: stacks/metis_develop.yml
-    metis_db: stacks/metis_db.yml
-    db_setup_metis: stacks/db_setup_metis.yml
-    gunslinger: stacks/gunslinger.yml
-    forecaxter: stacks/forecaxter.yml
-networks:
-    - frontend
-    - metis_db
+```yaml
+    stacks:
+        nginx_scope_feedback: stacks/nginx_scope_feedback.yml
+        elk: stacks/elk.yml
+        metis_develop: stacks/metis_develop.yml
+        metis_db: stacks/metis_db.yml
+        db_setup_metis: stacks/db_setup_metis.yml
+        gunslinger: stacks/gunslinger.yml
+        forecaxter: stacks/forecaxter.yml
+    networks:
+        - frontend
+        - metis_db
 ```
 
 - Start the Moon deployer:
-```
-docker stack rm moon
-docker stack deploy -c moon.yml moon
+```bash
+    docker stack rm moon
+    docker stack deploy -c moon.yml moon
 ```
 
 - Check that moon is running properly and that it is spinning up the stacks defined in moon-stacks.yml.
 On the swarm manager node, run the following commands to check state:
-```
-docker stack ls
-docker ps
+```bash
+    docker stack ls
+    docker ps
 ```
