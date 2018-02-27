@@ -102,8 +102,7 @@ Restart docker daemon:
     sudo /etc/init.d/docker restart
 ```
 
-- Set up ssh keys
-If any of the build node or the swarm manager node isn't the same machine as the deployer node, you will need to set up a private key for Moon to be able to ssh into the remote machines. 
+- Set up ssh keys. If any of the build node or the swarm manager node isn't the same machine as the deployer node, you will need to set up a private key for Moon to be able to ssh into the remote machines. 
 The path to the private key needs to be provided to Moon in the MOON\_PRIVATE\_KEY environment variable. 
 If you run Moon in a container as decribed below, you can use a Docker secret to pass the file to the container.
 Private keys will need to be uploaded to the remote hosts.
@@ -148,20 +147,8 @@ Here is an example using a remote swarm manager, a private key provided as a Doc
         data:
 ```
 MOON\_REPO indicates the repository where the moon-stacks.yml file can be found. 
-Here is a example of moon-stacks.yml listing the compose files for each stack to be run on the swarm:
-```yaml
-    stacks:
-        nginx_scope_feedback: stacks/nginx_scope_feedback.yml
-        elk: stacks/elk.yml
-        metis_develop: stacks/metis_develop.yml
-        metis_db: stacks/metis_db.yml
-        db_setup_metis: stacks/db_setup_metis.yml
-        gunslinger: stacks/gunslinger.yml
-        forecaxter: stacks/forecaxter.yml
-    networks:
-        - frontend
-        - metis_db
-```
+If not localhost, the MOON\_BUILD\_LOCATION and MOON\_SWARM\_LOCATION must include ssh user and machine address (username@machine-address.com).
+MOON\_CYCLE is the minimum time in seconds before the deployer scans the repositories again. Since the deployer doesn't rely on webhooks or requests initiated by your git repository, setting MOON\_CYCLE to a very low value is not recommended. It could trigger anti-DOS measures from the repository software and get the deployer machine temporarily blacklisted. For the same reason, add a reasonable delay in the restart policy for the deployer.
 
 - Start the Moon deployer:
 ```bash
