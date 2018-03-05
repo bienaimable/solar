@@ -14,7 +14,6 @@ from autologging import traced, logged, TRACE
 logging.basicConfig(level=logging.WARNING, stream=sys.stdout,
     format="%(levelname)s:%(name)s:%(funcName)s:%(message)s")
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 @traced
 @attr.s
@@ -209,7 +208,6 @@ class Swarm:
     def add_stack(self, stack):
         compose_file = sh.cat(stack.filename)
         self.shell.docker.stack.deploy(compose_file, '--compose-file', '-', stack.name)
-        #self.shell.docker.stack.deploy("-c", stack.filename, stack.name)
     def remove_stack(self, stack):
         self.shell.docker.stack.rm(stack.name)
 
@@ -242,45 +240,70 @@ class Manager:
                 logger.info('Adding network {}'.format(network.name))
                 network.add_to(self.swarm)
                 logger.info('Network {} added'.format(network.name))
-    def build_and_push(self, stacks, scope='everything'):
-        for stack in stacks:
+    def check_instructions_repository(self, instructions):
+        if not self.instructions.uptodate():
+            logger.info('Instructions not up-to-date. Refreshing everything...')
+            logger.info('Pulling new instructions...')
+            self.instructions.refresh()
+            logger.info('Removing dangling stacks...')
+            self.clean_stacks(instructions)
+            logger.info('Creating missing networks...')
+            self.create_networks(instructions)
+            for stack in instructions.stacks:
+                for service in stack.services:
+                    if service.repository:
+                        success = service.image.build()
+                        if success:
+                            logger.info(
+                                'Pushing service image {} from stack {}...'\
+                                .format(
+                                    service.name,
+                                    stack.name))
+                            service.image.push()
+                        service.repository.refresh()
+                logger.info(
+                    'Deploying stack {}...'\
+                    .format(stack.name))
+                stack.add_to(self.swarm)
+            logger.info('System refreshed')
+    def check_stack_repositories(self, instructions):
+        for stack in instructions.stacks:
+            redeploy = False
             for service in stack.services:
                 if service.repository:
-                    if not service.repository.uptodate() or scope == 'everything':
+                    if not service.repository.uptodate():
+                        redeploy = True
                         logger.info(
                             'Service {} in stack {} not up-to-date. Refreshing...'\
                             .format(
                                 service.name,
                                 stack.name))
+                        logger.info(
+                            'Building service {} in stack {}...'\
+                            .format(
+                                service.name,
+                                stack.name))
                         success = service.image.build()
                         if success:
-                            service.image.push()
-                            stack.add_to(self.swarm)
                             logger.info(
-                                'Service {} in stack {} refreshed'\
+                                'Pushing service image {} from stack {}...'\
                                 .format(
                                     service.name,
                                     stack.name))
+                            service.image.push()
                         service.repository.refresh()
-    def deploy(self, stacks, scope='everything'):
-            for stack in self.instructions.stacks:
-                if ( not any(running_stack.name == stack.name 
-                            for running_stack in self.swarm.stacks)
-                     or scope == 'everything' ):
-                    logger.info('Deploying {}'.format(stack.name))
-                    stack.add_to(self.swarm)
+            if redeploy:
+                logger.info(
+                    'Deploying stack {}...'\
+                    .format(stack.name))
+                stack.add_to(self.swarm)
+                logger.info(
+                    'Stack {} refreshed'\
+                    .format(stack.name))
+
     def sync(self):
-        if not self.instructions.uptodate():
-            logger.info('Instructions not up-to-date. Refreshing...')
-            self.instructions.refresh()
-            scope = 'everything'
-        else:
-            scope = 'missing'
-        self.clean_stacks(self.instructions)
-        self.create_networks(self.instructions)
-        self.build_and_push(self.instructions.stacks, scope)
-        self.deploy(self.instructions.stacks, scope)
-        if scope == 'everything': logger.info('System refreshed')
+        self.check_instructions_repository(self.instructions)
+        self.check_stack_repositories(self.instructions)
     def monitor(self, cycle_time):
         while True:
             self.sync()
@@ -291,6 +314,11 @@ locations = {}
 locations['build_location'] = os.environ.get('MOON_BUILD_LOCATION') or 'localhost'
 locations['swarm_location'] = os.environ.get('MOON_SWARM_LOCATION') or 'localhost'
 locations['private_key'] = os.environ.get('MOON_PRIVATE_KEY')
+debug_mode = True if os.environ.get('MOON_DEBUG') and os.environ.get('MOON_DEBUG').lower() == 'true' else False
+if debug_mode:
+    logger.setLevel(TRACE)
+else:
+    logger.setLevel(logging.INFO)
 
 if __name__ == "__main__":
     manager = Manager()
