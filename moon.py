@@ -252,6 +252,11 @@ class Manager:
             for stack in instructions.stacks:
                 for service in stack.services:
                     if service.repository:
+                        logger.info(
+                            'Building service {} in stack {}...'\
+                            .format(
+                                service.name,
+                                stack.name))
                         success = service.image.build()
                         if success:
                             logger.info(
