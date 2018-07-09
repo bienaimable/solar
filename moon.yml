@@ -1,7 +1,7 @@
 version: "3.3"
 services:
     moon:
-        image: bienaimable/moon2
+        image: moon
         deploy:
             restart_policy:
                 condition: any
@@ -15,20 +15,29 @@ services:
               uid: '0'
               gid: '0'
               mode: 0600
+            - source: registry_password
+              target: registry_password
+              uid: '0'
+              gid: '0'
+              mode: 0600
         volumes:
             - /var/run/docker.sock:/var/run/docker.sock
-            - data:/data
+            #- data4:/data
         environment:
             MOON_BUILD_LOCATION: localhost
-            MOON_SWARM_LOCATION: f.pillot@192.168.154.37
-            MOON_PRIVATE_KEY: '/run/secrets/private_key'
-            MOON_BRANCH: master
+            MOON_SWARM_LOCATION: docker@crtoprojects.com
+            MOON_SWARM_KEYPATH: '/run/secrets/private_key'
+            MOON_REGISTRY_ADDRESS: 'registry.crtoprojects.com:443'
+            MOON_REGISTRY_USERNAME: 'registry'
+            MOON_REGISTRY_PASSWORD_PATH: '/run/secrets/registry_password'
             MOON_REPO: https://f.pillot@gitlab.criteois.com/f.pillot/swarm-configuration-itservers.git
             MOON_BRANCH: test-new-moon
             MOON_CYCLE: 30
             MOON_DEBUG: 'true'
 secrets:
+    registry_password:
+        file: /tmp/registry_password.txt
     private_key:
-        file: /home/user/.ssh/id_rsa
+        file: /home/f.pillot/.ssh/crtoprojectscom.pem
 volumes:
-    data:
+    data4:

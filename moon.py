@@ -10,21 +10,33 @@ import pathlib
 import sys
 import hashlib
 from autologging import traced, logged, TRACE
+from dataclasses import dataclass
 
-logging.basicConfig(level=logging.WARNING, stream=sys.stdout,
-    format="%(levelname)s:%(name)s:%(funcName)s:%(message)s")
-logger = logging.getLogger(__name__)
+# Set logging level
+debug_mode = True if os.environ.get('MOON_DEBUG') and os.environ.get('MOON_DEBUG').lower() == 'true' else False
+if debug_mode:
+    logging.basicConfig(level=logging.DEBUG, stream=sys.stdout,
+        format="%(levelname)s:%(name)s:%(funcName)s:%(message)s")
+    logger = logging.getLogger(__name__)
+    logger.setLevel(TRACE)
+else:
+    logging.basicConfig(level=logging.WARNING, stream=sys.stdout,
+        format="%(levelname)s:%(name)s:%(funcName)s:%(message)s")
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
 
 @traced
 @attr.s
 @logged
 class Folder():
     path = attr.ib()
+    def __attrs_post_init__(self):
+        self.shell = build_shell.sh
     @property
     def parent(self):
         return pathlib.Path(self.path).parent
     def delete(self):
-        sh.rm("-r", self.path)
+        self.shell.rm("-r", self.path)
     def exists(self):
         return(os.path.isdir(self.path))
 
@@ -37,6 +49,7 @@ class Repository():
     stack_name = attr.ib()
     service_name = attr.ib()
     def __attrs_post_init__(self):
+        self.shell = build_shell.sh
         unique_id = hashlib.sha256((
                                     self.stack_name + '#' \
                                     + self.service_name + '#' \
@@ -45,7 +58,7 @@ class Repository():
         self.folder = Folder('/data/' + unique_id)
     def refresh(self):
         if self.folder.exists(): self.folder.delete()
-        git = sh.git.bake(_cwd=str(self.folder.parent))
+        git = self.shell.git.bake(_cwd=str(self.folder.parent))
         git.clone("--depth", 
                   "1", 
                   "-b", 
@@ -54,9 +67,10 @@ class Repository():
                   self.folder.path)
     def uptodate(self):
         if not self.folder.exists(): return False
-        git = sh.git.bake(_cwd=self.folder.path)
+        git = self.shell.git.bake(_cwd=self.folder.path)
         git.fetch()
-        return "is up-to-date" in git.status()
+        print(git.status())
+        return "is up to date" in git.status()
 
 @traced
 @attr.s
@@ -65,14 +79,7 @@ class Image:
     name = attr.ib()
     options = attr.ib()
     def __attrs_post_init__(self):
-        if locations['build_location'] == 'localhost':
-            self.shell = sh
-        else:
-            self.shell = sh.ssh.bake(
-                locations['build_location'], 
-                i=locations['private_key'], 
-                T=True,
-                o='StrictHostKeyChecking=no')
+        self.shell = build_shell.sh
     def build(self):
         args = ["-t", self.name]
         if type(self.options) is str:
@@ -181,14 +188,8 @@ class Instructions:
 @logged
 class Swarm:
     def __attrs_post_init__(self):
-        if locations['swarm_location'] == 'localhost':
-            self.shell = sh
-        else:
-            self.shell = sh.ssh.bake(
-                locations['swarm_location'], 
-                i=locations['private_key'], 
-                T=True,
-                o='StrictHostKeyChecking=no')
+        self.shell = swarm_shell.sh
+        self.build_shell = build_shell.sh
     @property
     def networks(self):
         name_index = 1
@@ -206,17 +207,28 @@ class Swarm:
     def remove_network(self, network):
         self.shell.docker.network.rm(network.name)
     def add_stack(self, stack):
-        compose_file = sh.cat(stack.filename)
-        self.shell.docker.stack.deploy(compose_file, '--compose-file', '-', stack.name)
+        compose_file = self.build_shell.cat(stack.filename)
+        self.shell.docker.stack.deploy(compose_file, '--with-registry-auth', '--compose-file', '-', stack.name)
     def remove_stack(self, stack):
         self.shell.docker.stack.rm(stack.name)
 
 @traced
-@attr.s
+@dataclass
 @logged
-class Manager:
-    def __attrs_post_init__(self):
+class Deployer:
+    def __post_init__(self):
         self.swarm = Swarm()
+    def login(self, registry_password_path=None, registry_address=None, registry_username=None):
+        if registry_password_path:
+            with open(registry_password_path) as password_file:
+                registry_password = password_file.read().rstrip('\n')
+            registry = Registry(
+                address=registry_address,
+                username=registry_username,
+                password=registry_password
+            )
+            build_shell.login(registry)
+            swarm_shell.login(registry)
     def link(self, url, branch, stacks_filename="moon-stacks.yml"):
         self.instructions = Instructions(
                             Repository(
@@ -305,7 +317,6 @@ class Manager:
                 logger.info(
                     'Stack {} refreshed'\
                     .format(stack.name))
-
     def sync(self):
         self.check_instructions_repository(self.instructions)
         self.check_stack_repositories(self.instructions)
@@ -314,21 +325,51 @@ class Manager:
             self.sync()
             time.sleep(int(cycle_time))
 
+@dataclass
+class Shell:
+    location: str
+    private_key_path: str = None
+    def __post_init__(self):
+        if self.location == 'localhost':
+            self.sh = sh
+        else:
+            self.sh = sh.ssh.bake(
+                self.location, 
+                i=self.private_key_path, 
+                T=True,
+                o='StrictHostKeyChecking=no')
+    def login(self, registry):
+        if registry.username:
+            self.sh.docker.login(
+                registry.address,
+                username=registry.username,
+                password=registry.password,
+            )
 
-locations = {}
-locations['build_location'] = os.environ.get('MOON_BUILD_LOCATION') or 'localhost'
-locations['swarm_location'] = os.environ.get('MOON_SWARM_LOCATION') or 'localhost'
-locations['private_key'] = os.environ.get('MOON_PRIVATE_KEY')
-debug_mode = True if os.environ.get('MOON_DEBUG') and os.environ.get('MOON_DEBUG').lower() == 'true' else False
-if debug_mode:
-    logger.setLevel(TRACE)
-else:
-    logger.setLevel(logging.INFO)
+@dataclass
+class Registry:
+    address: str = 'localhost'
+    username: str = None
+    password: str = None
+
+
+build_location = os.environ.get('MOON_BUILD_LOCATION') or 'localhost'
+swarm_location = os.environ.get('MOON_SWARM_LOCATION') or 'localhost'
+build_keypath = os.environ.get('MOON_BUILD_KEYPATH') or None
+swarm_keypath = os.environ.get('MOON_SWARM_KEYPATH') or None
+build_shell = Shell(build_location, private_key_path=build_keypath)
+swarm_shell = Shell(swarm_location, private_key_path=swarm_keypath)
 
 if __name__ == "__main__":
-    manager = Manager()
-    manager.link(
+    # Start deployer
+    deployer = Deployer()
+    deployer.login(
+        registry_address=os.environ.get('MOON_REGISTRY_ADDRESS'),
+        registry_username=os.environ.get('MOON_REGISTRY_USERNAME'),
+        registry_password_path=os.environ.get('MOON_REGISTRY_PASSWORD_PATH'),
+    )
+    deployer.link(
         os.environ['MOON_REPO'], 
         os.environ.get('MOON_BRANCH') or 'master')
-    manager.monitor(
+    deployer.monitor(
         os.environ.get('MOON_CYCLE') or '60')
