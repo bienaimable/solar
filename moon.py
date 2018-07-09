@@ -69,7 +69,6 @@ class Repository():
         if not self.folder.exists(): return False
         git = self.shell.git.bake(_cwd=self.folder.path)
         git.fetch()
-        print(git.status())
         return "is up to date" in git.status()
 
 @traced
